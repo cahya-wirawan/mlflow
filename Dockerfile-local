@@ -1,0 +1,35 @@
+FROM python:3.10-bullseye
+
+ARG UID=11132
+ARG GID=11133
+
+ARG APP_DIR=/home/mlflow
+WORKDIR $APP_DIR
+
+# adding an unprivileged user
+RUN groupadd --gid $GID mlflow  \
+    && useradd --uid $UID --gid mlflow --shell /bin/bash --create-home mlflow
+
+RUN curl -sL https://deb.nodesource.com/setup_20.x | bash - \
+    && apt-get install -y --no-install-recommends nodejs \
+    # java
+    openjdk-11-jre-headless \
+    # yarn
+    && npm install --global yarn \
+    # protoc
+    && wget https://github.com/protocolbuffers/protobuf/releases/download/v3.19.4/protoc-3.19.4-linux-x86_64.zip -O /tmp/protoc.zip \
+    && mkdir -p /home/mlflow/.local \
+    && unzip /tmp/protoc.zip -d /home/mlflow/.local/protoc \
+    && rm /tmp/protoc.zip \
+    && chmod -R +x /home/mlflow/.local/protoc
+
+RUN pip install --no-cache mlflow
+COPY run.sh ./
+
+ENV PATH="/home/mlflow/.local/protoc/bin:$PATH"
+RUN chown -R $UID:$GID $APP_DIR
+
+# the "mlflow" user created above, represented numerically for optimal compatibility with Kubernetes security policies
+USER $UID:$GID
+
+ENTRYPOINT ["/bin/sh", "-c", "/home/mlflow/run.sh"]
